@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import { PRBTest } from "@prb/test/PRBTest.sol";
 import { console2 } from "forge-std/console2.sol";
 import { StdCheats } from "forge-std/StdCheats.sol";
-import { GameStaking } from "../src/GameStaking.sol";
+import { GameWallet } from "../src/GameWallet.sol";
 import { Admin, Submitter, Player, InitSetup, SigUtils } from "./inittest.sol";
 
 // when a user deposits token balance
@@ -245,39 +245,39 @@ contract BalancesServerWithdrawalTest is PRBTest, InitSetup {
 
     // should return true when message is valid
     function testWithdrawSignedMessage() public {
-        GameStaking.Withdraw memory withdraw =
-            GameStaking.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
+        GameWallet.Withdraw memory withdraw =
+            GameWallet.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
 
         bytes32 digest = sigUtils.getWithdrawTypedDataHash(withdraw);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(player3PrivateKey, digest);
 
-        GameStaking.Signature memory sigMsg = GameStaking.Signature({ v: v, r: r, s: s });
+        GameWallet.Signature memory sigMsg = GameWallet.Signature({ v: v, r: r, s: s });
 
         assertEq(gs.withdrawSignedCheck(withdraw, sigMsg), player3_addr);
     }
 
     // should return false when message is not valid
     function testWithdrawSignedMessageInvalidAddress() public {
-        GameStaking.Withdraw memory withdraw =
-            GameStaking.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
+        GameWallet.Withdraw memory withdraw =
+            GameWallet.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
 
         bytes32 digest = sigUtils.getWithdrawTypedDataHash(withdraw);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(player3PrivateKey, digest);
 
-        GameStaking.Signature memory sigMsg = GameStaking.Signature({ v: v, r: r, s: s });
+        GameWallet.Signature memory sigMsg = GameWallet.Signature({ v: v, r: r, s: s });
 
         assertNotEq(gs.withdrawSignedCheck(withdraw, sigMsg), player4_addr);
     }
 
     // should succeed if nonce is correct and expiry is correct
     function testWithdrawalServer() public {
-        GameStaking.Withdraw memory withdraw =
-            GameStaking.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
+        GameWallet.Withdraw memory withdraw =
+            GameWallet.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
 
         bytes32 digest = sigUtils.getWithdrawTypedDataHash(withdraw);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(player3PrivateKey, digest);
 
-        GameStaking.Signature memory sigMsg = GameStaking.Signature({ v: v, r: r, s: s });
+        GameWallet.Signature memory sigMsg = GameWallet.Signature({ v: v, r: r, s: s });
 
         submitter.withdrawTokenAdmin(withdraw, sigMsg);
 

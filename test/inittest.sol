@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import { GameStaking } from "../src/GameStaking.sol";
+import { GameWallet } from "../src/GameWallet.sol";
 
 import { ERC20 } from "@openzeppelin/token/ERC20/ERC20.sol";
 import { IERC20 } from "@openzeppelin/token/ERC20/IERC20.sol";
@@ -16,14 +16,14 @@ contract Money is ERC20, Ownable {
     }
 }
 
-// --- GameStaking with extra convenience testing functions ---
-contract GameStakingExtra is GameStaking {
+// --- GameWallet with extra convenience testing functions ---
+contract GameStakingExtra is GameWallet {
     constructor(
         address _token,
         uint256 _max_balance,
         uint256 _withdrawal_delay
     )
-        GameStaking(_token, _max_balance, _withdrawal_delay)
+        GameWallet(_token, _max_balance, _withdrawal_delay)
     { }
 
     // incroporate extra convenience or shortcut functions needed for testing here
@@ -61,20 +61,15 @@ contract Submitter {
     }
 
     // Submitter Callable Functions
-    function withdrawTokenAdmin(
-        GameStaking.Withdraw memory withdraw,
-        GameStaking.Signature memory signedMsg
-    )
-        external
-    {
+    function withdrawTokenAdmin(GameWallet.Withdraw memory withdraw, GameWallet.Signature memory signedMsg) external {
         gs.withdrawTokenAdmin(withdraw, signedMsg);
     }
 
     function processStakedMatch(
-        GameStaking.Stake memory stake1,
-        GameStaking.Stake memory stake2,
-        GameStaking.Signature memory signedMsg1,
-        GameStaking.Signature memory signedMsg2,
+        GameWallet.Stake memory stake1,
+        GameWallet.Stake memory stake2,
+        GameWallet.Signature memory signedMsg1,
+        GameWallet.Signature memory signedMsg2,
         uint256 matchId,
         address winner
     )
@@ -84,8 +79,8 @@ contract Submitter {
     }
 
     function processExpiredMessage(
-        GameStaking.Stake memory stake,
-        GameStaking.Signature memory signedMsg,
+        GameWallet.Stake memory stake,
+        GameWallet.Signature memory signedMsg,
         bool chargeFee
     )
         external
@@ -158,24 +153,24 @@ contract SigUtils {
     // }
 
     // computes the hash of a withdraw
-    function getWithdrawStructHash(GameStaking.Withdraw memory _withdraw) internal pure returns (bytes32) {
+    function getWithdrawStructHash(GameWallet.Withdraw memory _withdraw) internal pure returns (bytes32) {
         return
             keccak256(abi.encode(WITHDRAW_TYPEHASH, _withdraw.user, _withdraw.nonce, _withdraw.expiry, _withdraw.fee));
     }
 
     // computes the hash of a stake
-    function getStakeStructHash(GameStaking.Stake memory _stake) internal pure returns (bytes32) {
+    function getStakeStructHash(GameWallet.Stake memory _stake) internal pure returns (bytes32) {
         return
             keccak256(abi.encode(STAKE_TYPEHASH, _stake.user, _stake.nonce, _stake.expiry, _stake.amount, _stake.fee));
     }
 
     // computes the hash of the fully encoded EIP-712 message for the domain, which can be used to recover the signer
-    function getWithdrawTypedDataHash(GameStaking.Withdraw memory _withdraw) public view returns (bytes32) {
+    function getWithdrawTypedDataHash(GameWallet.Withdraw memory _withdraw) public view returns (bytes32) {
         return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, getWithdrawStructHash(_withdraw)));
     }
 
     // computes the hash of the fully encoded EIP-712 message for the domain, which can be used to recover the signer
-    function getStakeTypedDataHash(GameStaking.Stake memory _stake) public view returns (bytes32) {
+    function getStakeTypedDataHash(GameWallet.Stake memory _stake) public view returns (bytes32) {
         return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, getStakeStructHash(_stake)));
     }
 }

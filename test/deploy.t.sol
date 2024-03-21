@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import { PRBTest } from "@prb/test/PRBTest.sol";
 import { console2 } from "forge-std/console2.sol";
 import { StdCheats } from "forge-std/StdCheats.sol";
-import { GameStaking } from "../src/GameStaking.sol";
+import { GameWallet } from "../src/GameWallet.sol";
 import { Admin, Submitter, Player, InitSetup } from "./inittest.sol";
 
 // when an admin deploys the game staking contract

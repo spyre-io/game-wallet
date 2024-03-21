@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import { IERC20 } from "./common/IERC20.sol";
+import { IERC20 } from "@openzeppelin/token/ERC20/IERC20.sol";
 import { AccessControl } from "@openzeppelin/access/AccessControl.sol";
 
-contract GameStaking is AccessControl {
+contract GameWallet is AccessControl {
     // --- Staking Setup ---
     IERC20 public token; // ex: USDC token address
     uint256 public max_balance; // ex: USDC has 6 decimals, set to 1000e6 for 1000 USDC
