@@ -1,0 +1,38 @@
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config
+
+[profile.default]
+  auto_detect_solc = false
+  bytecode_hash = "none"
+  cbor_metadata = false
+  gas_reports = ["*"]
+  libs = ["lib"]
+  optimizer = true
+  optimizer_runs = 10_000
+  out = "out"
+  script = "script"
+  solc = "0.8.20"
+  src = "src"
+  test = "test"
+
+[profile.ci]
+
+
+[etherscan]
+  mainnet = { key = "${API_KEY_ETHERSCAN}" }
+  sepolia = { key = "${API_KEY_ETHERSCAN}" }
+  polygon = { key = "${API_KEY_POLYGONSCAN}" }
+
+[fmt]
+  bracket_spacing = true
+  int_types = "long"
+  line_length = 120
+  multiline_func_header = "all"
+  number_underscore = "thousands"
+  quote_style = "double"
+  tab_width = 4
+  wrap_comments = true
+
+[rpc_endpoints]
+  localhost = "http://localhost:8545"
+  mainnet = "https://mainnet.infura.io/v3/${API_KEY_INFURA}"
+  sepolia = "https://sepolia.infura.io/v3/${API_KEY_INFURA}"
