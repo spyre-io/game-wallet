@@ -6,7 +6,7 @@ Game Wallet allows players to deposit a token balance and thereafter use signed 
 
 Owner of the Game Wallet can on-board one (or more) admins to manage settlement of transactions.
 
-An admin is responsible for determining the winner among two players and submit the transaction to debit one player and credit the other player. Admin can also collect a processing fee to cover gas and other infra costs. Admin role can be automated using a reference server implementation in this repo.
+An admin is responsible for determining the winner among two players and submit the transaction to debit one player and credit the other player. Admin can also collect a processing fee to cover gas and other infra costs. Admin role can be automated using a reference server implementation- [chain-chomp](https://github.com/spyre-io/chain-chomp).
 
 Players would have to spend gas to deposit a token balance (ex: USDC) into the Game Wallet. After deposit, they only sign messages (EIP-712 type support) for the amount they are about to stake while entering a match and do not have to submit transactions themselves to the network.
 
