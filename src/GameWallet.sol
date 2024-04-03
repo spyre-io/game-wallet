@@ -16,6 +16,14 @@ contract GameWallet is AccessControl {
     // user address => their withdrawAfter timestamp
     mapping(address => uint256) public withdrawAfter;
 
+    struct Deposit {
+        address user;
+        uint256 nonce;
+        uint256 expiry;
+        uint256 amount;
+        uint256 fee;
+    }
+
     struct Withdraw {
         address user;
         uint256 nonce;
@@ -39,6 +47,8 @@ contract GameWallet is AccessControl {
 
     // --- EIP712 ---
     bytes32 public DOMAIN_SEPARATOR;
+    bytes32 public constant DEPOSIT_TYPEHASH =
+        keccak256("Deposit(address user,uint256 nonce,uint256 expiry,uint256 amount,uint256 fee)");
     bytes32 public constant WITHDRAW_TYPEHASH =
         keccak256("Withdraw(address user,uint256 nonce,uint256 expiry,uint256 fee)");
     bytes32 public constant STAKE_TYPEHASH =
@@ -75,10 +85,10 @@ contract GameWallet is AccessControl {
     // --- Balance Management ---
     // deposit an amount
     function depositToken(uint256 amount) external {
-        // transfer token balance from msg.sender to staking contract
+        // transfer token balance from msg.sender to game wallet
         require(token.transferFrom(msg.sender, address(this), amount), "depositToken/token-transfer-from-user-failed");
 
-        // calculate new balance and ensure it does not exceed max_balance of staking contract
+        // calculate new balance and ensure it does not exceed max_balance of game wallet
         balances[msg.sender] = balances[msg.sender] + amount;
         require(balances[msg.sender] <= max_balance, "depositToken/deposit-amount-exceeds-max-balance");
 
@@ -116,6 +126,51 @@ contract GameWallet is AccessControl {
         require(token.transfer(msg.sender, balance), "withdrawToken/token-transfer-to-user-failed");
 
         emit BalanceUpdate(msg.sender, 0);
+    }
+
+    // server can deposit an amount
+    function depositTokenAdmin(
+        Deposit memory deposit,
+        Signature memory signedMsg
+    )
+        external
+        onlyRole(TXN_SUBMITTER_ROLE)
+    {
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        DEPOSIT_TYPEHASH, deposit.user, deposit.nonce, deposit.expiry, deposit.amount, deposit.fee
+                    )
+                )
+            )
+        );
+
+        require(
+            deposit.user == ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s),
+            "depositTokenAdmin/signer-user-address-mismatch"
+        );
+
+        require(deposit.expiry == 0 || block.timestamp <= deposit.expiry, "depositTokenAdmin/signature-expired");
+        require(deposit.nonce == nonces[deposit.user]++, "depositTokenAdmin/invalid-nonce");
+
+        // transfer token balance from user to game wallet
+        require(
+            token.transferFrom(deposit.user, address(this), deposit.amount),
+            "depositTokenAdmin/token-transfer-from-user-failed"
+        );
+
+        // calculate new balance and ensure it does not exceed max_balance of game wallet
+        balances[deposit.user] = balances[deposit.user] + deposit.amount;
+        require(balances[deposit.user] <= max_balance, "depositTokenAdmin/deposit-amount-exceeds-max-balance");
+
+        // withdrawal timestamp is reset
+        // any pending withdrawals are cancelled and have to be initiated again
+        withdrawAfter[deposit.user] = type(uint256).max;
+
+        emit BalanceUpdate(deposit.user, balances[deposit.user]);
     }
 
     // server can finalize withdrawal anytime
