@@ -8,7 +8,7 @@ import { GameWallet } from "../src/GameWallet.sol";
 import { Admin, Submitter, Player, InitSetup } from "./inittest.sol";
 
 // when staked match is processed
-contract ProcessStakedMatchTest is PRBTest, InitSetup {
+contract ProcessStakedMatchTest is InitSetup {
     // Available:
     // admin
     // submitter
@@ -58,7 +58,7 @@ contract ProcessStakedMatchTest is PRBTest, InitSetup {
 }
 
 // when expired message is processed
-contract ProcessExpiredMessageTest is PRBTest, InitSetup {
+contract ProcessExpiredMessageTest is InitSetup {
     // Available:
     // admin
     // submitter

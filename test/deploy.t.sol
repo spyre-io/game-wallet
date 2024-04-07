@@ -8,7 +8,7 @@ import { GameWallet } from "../src/GameWallet.sol";
 import { Admin, Submitter, Player, InitSetup } from "./inittest.sol";
 
 // when an admin deploys the game staking contract
-contract DeploymentTest is PRBTest, InitSetup {
+contract DeploymentTest is InitSetup {
     // Available:
     // admin
     // submitter
@@ -72,7 +72,7 @@ contract DeploymentTest is PRBTest, InitSetup {
 }
 
 // when eip712 methods are setup
-contract DeployEIP712Test is PRBTest, InitSetup {
+contract DeployEIP712Test is InitSetup {
     // Available:
     // admin
     // submitter

@@ -8,7 +8,7 @@ import { GameWallet } from "../src/GameWallet.sol";
 import { Admin, Submitter, Player, InitSetup, SigUtils } from "./inittest.sol";
 
 // when a user deposits token balance
-contract BalancesDepositTest is PRBTest, InitSetup {
+contract BalancesDepositTest is InitSetup {
     // Available:
     // admin
     // submitter
@@ -106,7 +106,7 @@ contract BalancesDepositTest is PRBTest, InitSetup {
 }
 
 // when a user self withdraws their token balance
-contract BalancesUserWithdrawalTest is PRBTest, InitSetup {
+contract BalancesUserWithdrawalTest is InitSetup {
     // Available:
     // admin
     // submitter
@@ -212,18 +212,12 @@ contract BalancesUserWithdrawalTest is PRBTest, InitSetup {
 }
 
 // when a user signs a message to allow server to withdraw their token balance
-contract BalancesServerWithdrawalTest is PRBTest, InitSetup {
+contract BalancesServerWithdrawalTest is InitSetup {
     // Available:
     // admin
     // submitter
     // player1
     // player2
-
-    SigUtils internal sigUtils;
-    uint256 internal player3PrivateKey;
-    uint256 internal player4PrivateKey;
-    address internal player3_addr;
-    address internal player4_addr;
 
     function setUp() public override {
         super.setUp();
@@ -232,21 +226,14 @@ contract BalancesServerWithdrawalTest is PRBTest, InitSetup {
         // additional setup
         admin.grantRole(gs.TXN_SUBMITTER_ROLE(), submitter_addr); // submitter receives role
 
-        sigUtils = new SigUtils(gs.DOMAIN_SEPARATOR());
-        player3PrivateKey = 0xA11CE;
-        player4PrivateKey = 0xB0B;
-        player3_addr = vm.addr(player3PrivateKey);
-        player4_addr = vm.addr(player4PrivateKey);
-
         // issue balance with testing shortcut
-        gs.setBalance(player3_addr, wad(250)); // ensure player3 has internal gs balance
-        money.mint(gs_addr, wad(250)); // ensure GS has money erc20 balance
+        addWalletBalance(player3_addr, wad(250)); // ensure player3 has gs balance
     }
 
     // should return true when message is valid
     function testWithdrawSignedMessage() public {
         GameWallet.Withdraw memory withdraw =
-            GameWallet.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
+            GameWallet.Withdraw({ user: player3_addr, nonce: 1, expiry: T0 + 1 days, fee: wad(15) });
 
         bytes32 digest = sigUtils.getWithdrawTypedDataHash(withdraw);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(player3PrivateKey, digest);
@@ -257,7 +244,7 @@ contract BalancesServerWithdrawalTest is PRBTest, InitSetup {
     }
 
     // should return false when message is not valid
-    function testWithdrawSignedMessageInvalidAddress() public {
+    function testInvalidAddressWithdrawSignedMessage() public {
         GameWallet.Withdraw memory withdraw =
             GameWallet.Withdraw({ user: player3_addr, nonce: 0, expiry: T0 + 1 days, fee: wad(15) });
 
@@ -283,7 +270,7 @@ contract BalancesServerWithdrawalTest is PRBTest, InitSetup {
 
         assertEq(money.balanceOf(player3_addr), wad(235)); // balance 250 - fee 15
         assertEq(gs.balances(player3_addr), wad(0)); // balance 0
-        assertEq(gs.nonces(player3_addr), 1); // nonce incremented
+        assertEq(gs.noncePool(0), T0 + 1 days + 1); // nonce expiry set
     }
 
     // // should fail if user has insufficient balance

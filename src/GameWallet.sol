@@ -54,7 +54,7 @@ contract GameWallet is AccessControl {
     bytes32 public constant STAKE_TYPEHASH =
         keccak256("Stake(address user,uint256 nonce,uint256 expiry,uint256 amount,uint256 fee)");
 
-    mapping(address => uint256) public nonces;
+    mapping(uint256 => uint256) public noncePool; // nonce value => nonce expiry
 
     // Auth
     bytes32 public constant TXN_SUBMITTER_ROLE = keccak256("TXN_SUBMITTER_ROLE");
@@ -154,7 +154,8 @@ contract GameWallet is AccessControl {
         );
 
         require(deposit.expiry == 0 || block.timestamp <= deposit.expiry, "depositTokenAdmin/signature-expired");
-        require(deposit.nonce == nonces[deposit.user]++, "depositTokenAdmin/invalid-nonce");
+        _resetNonceExpiry(deposit.nonce);
+        noncePool[deposit.nonce] = (deposit.expiry + 1);
 
         // transfer token balance from user to game wallet
         require(
@@ -194,7 +195,8 @@ contract GameWallet is AccessControl {
             "withdrawTokenAdmin/signer-user-address-mismatch"
         );
         require(withdraw.expiry == 0 || block.timestamp <= withdraw.expiry, "withdrawTokenAdmin/signature-expired");
-        require(withdraw.nonce == nonces[withdraw.user]++, "withdrawTokenAdmin/invalid-nonce");
+        _resetNonceExpiry(withdraw.nonce);
+        noncePool[withdraw.nonce] = (withdraw.expiry + 1);
 
         uint256 balance = balances[withdraw.user];
 
@@ -256,8 +258,10 @@ contract GameWallet is AccessControl {
         require(stake1.expiry == 0 || block.timestamp <= stake1.expiry, "processStakedMatch/stake1/signature-expired");
         require(stake2.expiry == 0 || block.timestamp <= stake2.expiry, "processStakedMatch/stake2/signature-expired");
 
-        require(stake1.nonce == nonces[stake1.user]++, "processStakedMatch/stake1/invalid-nonce");
-        require(stake2.nonce == nonces[stake2.user]++, "processStakedMatch/stake2/invalid-nonce");
+        _resetNonceExpiry(stake1.nonce);
+        noncePool[stake1.nonce] = (stake1.expiry + 1);
+        _resetNonceExpiry(stake2.nonce);
+        noncePool[stake2.nonce] = (stake2.expiry + 1);
 
         require(stake1.amount == stake2.amount, "processStakedMatch/stake-amounts-mismatch");
         require(stake1.fee == stake2.fee, "processStakedMatch/fee-amounts-mismatch");
@@ -281,44 +285,23 @@ contract GameWallet is AccessControl {
         emit BalanceUpdate(otherPlayer, balances[otherPlayer]);
     }
 
-    event PlayerUpdate(address indexed user);
-
-    // process expired message from a player to advance their nonce
-    // and process next matches
-    function processExpiredMessage(
-        Stake memory stake,
-        Signature memory signedMsg,
-        bool chargeFee
-    )
-        external
-        onlyRole(TXN_SUBMITTER_ROLE)
-    {
+    // --- Convenience Read Only functions ---
+    function depositSignedCheck(Deposit memory deposit, Signature memory signedMsg) external view returns (address) {
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
                 DOMAIN_SEPARATOR,
-                keccak256(abi.encode(STAKE_TYPEHASH, stake.user, stake.nonce, stake.expiry, stake.amount, stake.fee))
+                keccak256(
+                    abi.encode(
+                        DEPOSIT_TYPEHASH, deposit.user, deposit.nonce, deposit.expiry, deposit.amount, deposit.fee
+                    )
+                )
             )
         );
 
-        require(
-            stake.user == ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s),
-            "processExpiredMessage/signer-user-address-mismatch"
-        );
-
-        // advance nonce to unblock next signed messages
-        require(stake.nonce == nonces[stake.user]++, "processExpiredMessage/invalid-nonce");
-
-        // charge fee if appropriate
-        if (chargeFee) {
-            // send fee to transaction submitter address
-            require(token.transfer(msg.sender, stake.fee), "processExpiredMessage/token-transfer-to-admin-failed");
-        }
-
-        emit BalanceUpdate(stake.user, balances[stake.user]);
+        return ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s);
     }
 
-    // --- Convenience Read Only functions ---
     function withdrawSignedCheck(
         Withdraw memory withdraw,
         Signature memory signedMsg
@@ -348,5 +331,19 @@ contract GameWallet is AccessControl {
         );
 
         return ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s);
+    }
+
+    // --- Nonce Management ---
+    function _resetNonceExpiry(uint256 nonce) internal {
+        // check that current block timestamp is past nonce expiry timestamp
+        require(noncePool[nonce] < block.timestamp, "game-wallet/nonce-has-not-expired");
+
+        // nonce can be safely reset as the signed message relying on it to
+        // not be replayed again has expired
+        noncePool[nonce] = 0;
+    }
+
+    function resetNonceExpiry(uint256 nonce) external onlyRole(TXN_SUBMITTER_ROLE) {
+        _resetNonceExpiry(nonce);
     }
 }
