@@ -4,6 +4,21 @@ pragma solidity 0.8.20;
 import { IERC20 } from "@openzeppelin/token/ERC20/IERC20.sol";
 import { AccessControl } from "@openzeppelin/access/AccessControl.sol";
 
+interface USDC {
+    function receiveWithAuthorization(
+        address from,
+        address to,
+        uint256 value,
+        uint256 validAfter,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    )
+        external;
+}
+
 contract GameWallet is AccessControl {
     // --- Staking Setup ---
     IERC20 public token; // ex: USDC token address
@@ -154,7 +169,7 @@ contract GameWallet is AccessControl {
         emit BalanceUpdate(msg.sender, 0);
     }
 
-    // server can deposit an amount
+    // server can deposit an amount with a signed message
     function depositTokenAdmin(
         Deposit memory deposit,
         Signature memory signedMsg
@@ -162,6 +177,10 @@ contract GameWallet is AccessControl {
         external
         onlyRole(TXN_SUBMITTER_ROLE)
     {
+        // use these values for Permit
+        // PERMIT_TYPE = Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)
+        // PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
+
         bytes32 digest = keccak256(
             abi.encodePacked(
                 "\x19\x01",
@@ -204,6 +223,53 @@ contract GameWallet is AccessControl {
         }
 
         emit BalanceUpdate(deposit.user, balances[deposit.user]);
+    }
+
+    // server can execute deposit with transfer authorization (eip3009)
+    function receiveTokenAdmin(
+        address user,
+        uint256 amount,
+        uint256 expiry,
+        bytes32 nonce,
+        uint256 fee,
+        Signature memory signedMsg
+    )
+        external
+        onlyRole(TXN_SUBMITTER_ROLE)
+    {
+        // RECEIVE_WITH_AUTHORIZATION_TYPE : ReceiveWithAuthorization(address from,address to,uint256 value,uint256
+        // validAfter,uint256 validBefore,bytes32 nonce)
+        // RECEIVE_WITH_AUTHORIZATION_TYPEHASH : 0xd099cc98ef71107a616c4f0f941f04c322d8e254fe26b3c6668db87aae413de8;
+
+        // nonce value here is an eip3009 authorization nonce, any bytes32 value that has not been previously used
+        // token.authorizationState(address user, bytes32 nonce) should return false for a valid nonce
+
+        // execute authorization to receive token balance
+        // reverts upon failed transfer, does not return false
+        // to address is always this game wallet address
+        // validAfter is always set to 0
+        // signature format change
+        USDC(address(token)).receiveWithAuthorization(
+            user, address(this), amount, 0, expiry, nonce, signedMsg.v, signedMsg.r, signedMsg.s
+        );
+        // receive is used to restrict the ability to transfer to the game wallet contract
+        // to avoid griefing where a balance is transferred from user without being recorded by the game wallet
+
+        // withdrawal timestamp is reset
+        withdrawAfter[user] = type(uint256).max;
+
+        // fee is not signed off by the user in the signed message
+        // fee to txn submitter
+        balances[msg.sender] = balances[msg.sender] + fee;
+
+        // token balance - fee to user
+        balances[user] = balances[user] + amount - fee;
+        // revert if total user balance exceeds max_balance amount
+        if (balances[user] > max_balance) {
+            revert DepositExceedsLimit(balances[user], max_balance);
+        }
+
+        emit BalanceUpdate(user, balances[user]);
     }
 
     // server can finalize withdrawal anytime
