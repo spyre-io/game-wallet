@@ -66,7 +66,9 @@ contract GameWallet is AccessControl {
         max_balance = _max_balance;
         withdrawal_delay = _withdrawal_delay;
 
-        require(withdrawal_delay <= 7 days, "constructor/incorrect-delay");
+        if (withdrawal_delay > 7 days) {
+            revert WithdrawalDelayExceedsLimit(withdrawal_delay);
+        }
 
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -79,6 +81,19 @@ contract GameWallet is AccessControl {
         );
     }
 
+    // --- Errors ---
+    error WithdrawalDelayExceedsLimit(uint256 duration);
+    error TokenTransferFailed(address from, address to, uint256 amount);
+    error DepositExceedsLimit(uint256 balance, uint256 limit);
+    error UserWithdrawalDelayIncomplete(uint256 currentTimestamp, uint256 withdrawAfterTimestamp);
+    error SignerUserAddressMismatch(address inputUser, address recoveredSigner);
+    error SignatureExpired(uint256 expiryTimestamp, uint256 currentTimestamp);
+    error NonceHasNotExpired(uint256 currentTimestamp, uint256 nonceExpiryTimestamp);
+    error StakeMismatch(uint256 stake1, uint256 stake2);
+    error FeeMismatch(uint256 fee1, uint256 fee2);
+    error WinnerNotAmongStakers(address winner, address staker1, address staker2);
+
+    // --- Events ---
     event BalanceUpdate(address indexed user, uint256 currentBalance);
     event GameUpdate(uint256 indexed matchId, address winner, address otherPlayer, uint256 payout, uint256 fee);
 
@@ -86,11 +101,17 @@ contract GameWallet is AccessControl {
     // deposit an amount
     function depositToken(uint256 amount) external {
         // transfer token balance from msg.sender to game wallet
-        require(token.transferFrom(msg.sender, address(this), amount), "depositToken/token-transfer-from-user-failed");
+        bool transferStatus = token.transferFrom(msg.sender, address(this), amount);
+        if (transferStatus == false) {
+            revert TokenTransferFailed(msg.sender, address(this), amount);
+        }
 
-        // calculate new balance and ensure it does not exceed max_balance of game wallet
+        // update new balance
         balances[msg.sender] = balances[msg.sender] + amount;
-        require(balances[msg.sender] <= max_balance, "depositToken/deposit-amount-exceeds-max-balance");
+        // revert if total user balance exceeds max_balance amount
+        if (balances[msg.sender] > max_balance) {
+            revert DepositExceedsLimit(balances[msg.sender], max_balance);
+        }
 
         // withdrawal timestamp is reset
         // any pending withdrawals are cancelled and have to be initiated again
@@ -114,7 +135,9 @@ contract GameWallet is AccessControl {
 
     function withdrawToken() external {
         // check if withdraw after was set and has passed
-        require(withdrawAfter[msg.sender] <= block.timestamp, "withdrawToken/delay-incomplete");
+        if (block.timestamp < withdrawAfter[msg.sender]) {
+            revert UserWithdrawalDelayIncomplete(block.timestamp, withdrawAfter[msg.sender]);
+        }
 
         uint256 balance = balances[msg.sender];
 
@@ -123,7 +146,10 @@ contract GameWallet is AccessControl {
         withdrawAfter[msg.sender] = 0;
 
         // transfer a users entire balance to them
-        require(token.transfer(msg.sender, balance), "withdrawToken/token-transfer-to-user-failed");
+        bool transferStatus = token.transfer(msg.sender, balance);
+        if (transferStatus == false) {
+            revert TokenTransferFailed(address(this), msg.sender, balance);
+        }
 
         emit BalanceUpdate(msg.sender, 0);
     }
@@ -148,24 +174,28 @@ contract GameWallet is AccessControl {
             )
         );
 
-        require(
-            deposit.user == ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s),
-            "depositTokenAdmin/signer-user-address-mismatch"
-        );
+        if (deposit.user != ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s)) {
+            revert SignerUserAddressMismatch(deposit.user, ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s));
+        }
+        if (deposit.expiry < block.timestamp) {
+            revert SignatureExpired(deposit.expiry, block.timestamp);
+        }
 
-        require(deposit.expiry == 0 || block.timestamp <= deposit.expiry, "depositTokenAdmin/signature-expired");
         _resetNonceExpiry(deposit.nonce);
         noncePool[deposit.nonce] = (deposit.expiry + 1);
 
         // transfer token balance from user to game wallet
-        require(
-            token.transferFrom(deposit.user, address(this), deposit.amount),
-            "depositTokenAdmin/token-transfer-from-user-failed"
-        );
+        bool transferStatus = token.transferFrom(deposit.user, address(this), deposit.amount);
+        if (transferStatus == false) {
+            revert TokenTransferFailed(deposit.user, address(this), deposit.amount);
+        }
 
         // calculate new balance and ensure it does not exceed max_balance of game wallet
         balances[deposit.user] = balances[deposit.user] + deposit.amount;
-        require(balances[deposit.user] <= max_balance, "depositTokenAdmin/deposit-amount-exceeds-max-balance");
+        // revert if total user balance exceeds max_balance amount
+        if (balances[deposit.user] > max_balance) {
+            revert DepositExceedsLimit(balances[deposit.user], max_balance);
+        }
 
         // withdrawal timestamp is reset
         // any pending withdrawals are cancelled and have to be initiated again
@@ -190,11 +220,12 @@ contract GameWallet is AccessControl {
             )
         );
 
-        require(
-            withdraw.user == ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s),
-            "withdrawTokenAdmin/signer-user-address-mismatch"
-        );
-        require(withdraw.expiry == 0 || block.timestamp <= withdraw.expiry, "withdrawTokenAdmin/signature-expired");
+        if (withdraw.user != ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s)) {
+            revert SignerUserAddressMismatch(withdraw.user, ecrecover(digest, signedMsg.v, signedMsg.r, signedMsg.s));
+        }
+        if (withdraw.expiry < block.timestamp) {
+            revert SignatureExpired(withdraw.expiry, block.timestamp);
+        }
         _resetNonceExpiry(withdraw.nonce);
         noncePool[withdraw.nonce] = (withdraw.expiry + 1);
 
@@ -205,11 +236,15 @@ contract GameWallet is AccessControl {
         withdrawAfter[withdraw.user] = 0;
 
         // send fee amount to admin address (msg.sender)
-        require(token.transfer(msg.sender, withdraw.fee), "withdrawTokenAdmin/token-transfer-to-user-failed");
+        bool transferStatus1 = token.transfer(msg.sender, withdraw.fee);
+        if (transferStatus1 == false) {
+            revert TokenTransferFailed(address(this), msg.sender, withdraw.fee);
+        }
         // transfer a users balance minus fee to them
-        require(
-            token.transfer(withdraw.user, (balance - withdraw.fee)), "withdrawTokenAdmin/token-transfer-to-admin-failed"
-        );
+        bool transferStatus2 = token.transfer(withdraw.user, (balance - withdraw.fee));
+        if (transferStatus2 == false) {
+            revert TokenTransferFailed(address(this), withdraw.user, (balance - withdraw.fee));
+        }
 
         emit BalanceUpdate(withdraw.user, 0);
     }
@@ -246,26 +281,34 @@ contract GameWallet is AccessControl {
             )
         );
 
-        require(
-            stake1.user == ecrecover(digest1, signedMsg1.v, signedMsg1.r, signedMsg1.s),
-            "processStakedMatch/stake1/signer-user-address-mismatch"
-        );
-        require(
-            stake2.user == ecrecover(digest2, signedMsg2.v, signedMsg2.r, signedMsg2.s),
-            "processStakedMatch/stake2/signer-user-address-mismatch"
-        );
+        if (stake1.user != ecrecover(digest1, signedMsg1.v, signedMsg1.r, signedMsg1.s)) {
+            revert SignerUserAddressMismatch(stake1.user, ecrecover(digest1, signedMsg1.v, signedMsg1.r, signedMsg1.s));
+        }
+        if (stake2.user != ecrecover(digest2, signedMsg2.v, signedMsg2.r, signedMsg2.s)) {
+            revert SignerUserAddressMismatch(stake2.user, ecrecover(digest2, signedMsg2.v, signedMsg2.r, signedMsg2.s));
+        }
 
-        require(stake1.expiry == 0 || block.timestamp <= stake1.expiry, "processStakedMatch/stake1/signature-expired");
-        require(stake2.expiry == 0 || block.timestamp <= stake2.expiry, "processStakedMatch/stake2/signature-expired");
+        if (stake1.expiry < block.timestamp) {
+            revert SignatureExpired(stake1.expiry, block.timestamp);
+        }
+        if (stake2.expiry < block.timestamp) {
+            revert SignatureExpired(stake2.expiry, block.timestamp);
+        }
 
         _resetNonceExpiry(stake1.nonce);
         noncePool[stake1.nonce] = (stake1.expiry + 1);
         _resetNonceExpiry(stake2.nonce);
         noncePool[stake2.nonce] = (stake2.expiry + 1);
 
-        require(stake1.amount == stake2.amount, "processStakedMatch/stake-amounts-mismatch");
-        require(stake1.fee == stake2.fee, "processStakedMatch/fee-amounts-mismatch");
-        require(winner == stake1.user || winner == stake2.user, "processStakedMatch/signers-not-winner");
+        if (stake1.amount != stake2.amount) {
+            revert StakeMismatch(stake1.amount, stake2.amount);
+        }
+        if (stake1.fee != stake2.fee) {
+            revert FeeMismatch(stake1.fee, stake2.fee);
+        }
+        if (winner != stake1.user && winner != stake2.user) {
+            revert WinnerNotAmongStakers(winner, stake1.user, stake2.user);
+        }
 
         // debit from player 1 and player 2
         balances[stake1.user] = balances[stake1.user] - stake1.amount;
@@ -276,7 +319,9 @@ contract GameWallet is AccessControl {
         balances[winner] = balances[winner] + payout;
 
         // send fee to transaction submitter address
-        require(token.transfer(msg.sender, stake1.fee), "processStakedMatch/token-transfer-to-admin-failed");
+        if (token.transfer(msg.sender, stake1.fee) == false) {
+            revert TokenTransferFailed(address(this), msg.sender, stake1.fee);
+        }
 
         address otherPlayer = (stake1.user == winner) ? stake1.user : stake2.user;
         emit GameUpdate(matchId, winner, otherPlayer, payout, stake1.fee);
@@ -336,7 +381,9 @@ contract GameWallet is AccessControl {
     // --- Nonce Management ---
     function _resetNonceExpiry(uint256 nonce) internal {
         // check that current block timestamp is past nonce expiry timestamp
-        require(noncePool[nonce] < block.timestamp, "game-wallet/nonce-has-not-expired");
+        if (block.timestamp < noncePool[nonce]) {
+            revert NonceHasNotExpired(block.timestamp, noncePool[nonce]);
+        }
 
         // nonce can be safely reset as the signed message relying on it to
         // not be replayed again has expired
