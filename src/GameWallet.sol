@@ -190,16 +190,18 @@ contract GameWallet is AccessControl {
             revert TokenTransferFailed(deposit.user, address(this), deposit.amount);
         }
 
+        // withdrawal timestamp is reset
+        // any pending withdrawals are cancelled and have to be initiated again
+        withdrawAfter[deposit.user] = type(uint256).max;
+
+        // txn submitter collects fee
+        balances[msg.sender] = balances[msg.sender] + deposit.fee;
         // calculate new balance and ensure it does not exceed max_balance of game wallet
-        balances[deposit.user] = balances[deposit.user] + deposit.amount;
+        balances[deposit.user] = balances[deposit.user] + deposit.amount - deposit.fee;
         // revert if total user balance exceeds max_balance amount
         if (balances[deposit.user] > max_balance) {
             revert DepositExceedsLimit(balances[deposit.user], max_balance);
         }
-
-        // withdrawal timestamp is reset
-        // any pending withdrawals are cancelled and have to be initiated again
-        withdrawAfter[deposit.user] = type(uint256).max;
 
         emit BalanceUpdate(deposit.user, balances[deposit.user]);
     }
@@ -230,19 +232,18 @@ contract GameWallet is AccessControl {
         noncePool[withdraw.nonce] = (withdraw.expiry + 1);
 
         uint256 balance = balances[withdraw.user];
-
-        // reset withdrawAfter and balance
+        // reset user balance
         balances[withdraw.user] = 0;
+
+        // reset withdrawAfter
         withdrawAfter[withdraw.user] = 0;
 
         // send fee amount to admin address (msg.sender)
-        bool transferStatus1 = token.transfer(msg.sender, withdraw.fee);
-        if (transferStatus1 == false) {
-            revert TokenTransferFailed(address(this), msg.sender, withdraw.fee);
-        }
+        balances[msg.sender] = balances[msg.sender] + withdraw.fee;
+
         // transfer a users balance minus fee to them
-        bool transferStatus2 = token.transfer(withdraw.user, (balance - withdraw.fee));
-        if (transferStatus2 == false) {
+        bool transferStatus = token.transfer(withdraw.user, (balance - withdraw.fee));
+        if (transferStatus == false) {
             revert TokenTransferFailed(address(this), withdraw.user, (balance - withdraw.fee));
         }
 
@@ -314,14 +315,12 @@ contract GameWallet is AccessControl {
         balances[stake1.user] = balances[stake1.user] - stake1.amount;
         balances[stake2.user] = balances[stake2.user] - stake2.amount;
 
-        // credit winner balance
+        // send fee to transaction submitter address
+        balances[msg.sender] = balances[msg.sender] + stake1.fee;
+
+        // credit winner
         uint256 payout = (stake1.amount + stake2.amount - stake1.fee);
         balances[winner] = balances[winner] + payout;
-
-        // send fee to transaction submitter address
-        if (token.transfer(msg.sender, stake1.fee) == false) {
-            revert TokenTransferFailed(address(this), msg.sender, stake1.fee);
-        }
 
         address otherPlayer = (stake1.user == winner) ? stake1.user : stake2.user;
         emit GameUpdate(matchId, winner, otherPlayer, payout, stake1.fee);

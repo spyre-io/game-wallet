@@ -70,7 +70,8 @@ contract NoncesTest is InitSetup {
         submitter.depositTokenAdmin(deposit, signedMsg);
 
         assertEq(money.balanceOf(player3_addr), wad(9500)); // 10000 - 500
-        assertEq(gs.balances(player3_addr), wad(500)); // +500
+        assertEq(gs.balances(player3_addr), wad(485)); // +500 - 15
+        assertEq(gs.balances(submitter_addr), wad(15)); // +15
         assertEq(gs.noncePool(_nonce), T0 + 1 days + 1); // nonce expiry updated
     }
 
@@ -90,6 +91,7 @@ contract NoncesTest is InitSetup {
 
         assertEq(money.balanceOf(player3_addr), wad(10_247)); // 10000 + 500 - 3
         assertEq(gs.balances(player3_addr), wad(0)); // 250 - 250
+        assertEq(gs.balances(submitter_addr), wad(3)); // +3
         assertEq(gs.noncePool(_nonce), T0 + 1 days + 1); // nonce expiry updated
     }
 
@@ -118,12 +120,13 @@ contract NoncesTest is InitSetup {
 
         assertEq(gs.balances(player3_addr), wad(505)); // 500 - 10 + 15
         assertEq(gs.balances(player4_addr), wad(490)); // 500 - 10
+        assertEq(gs.balances(submitter_addr), wad(5)); // +5
         assertEq(gs.noncePool(_nonce1), T0 + 1 days + 1); // nonce expiry updated
         assertEq(gs.noncePool(_nonce2), T0 + 1 days + 1); // nonce expiry updated
     }
 
     // should allow user to use an existing expired pooled nonce
-    function testExpiredPooledNonce() public {
+    function testExpiredPooledNonceReuse() public {
         addWalletBalance(player3_addr, wad(250));
 
         uint256 _nonce = gs.latestPooledNonceUsed();
@@ -139,6 +142,7 @@ contract NoncesTest is InitSetup {
 
         submitter.withdrawTokenAdmin(withdraw, signedMsg);
         assertEq(gs.noncePool(_nonce), T0 + 3 days + 1); // nonce expiry updated
+        assertEq(gs.balances(submitter_addr), wad(3)); // +3
     }
 
     // should fail if a pooled nonce has not expired before expiry
