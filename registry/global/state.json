@@ -1,0 +1,37 @@
+{
+  "contracts": {
+    "draft": [],
+    "active": [
+      {
+        "id": "",
+        "name": "",
+        "artifact": "gw01",
+        "deployment": {
+          "network_name": "base_sepolia",
+          "address": "",
+          "constructor_args": "",
+          "txn_hash": ""
+        },
+        "config": { "auth": "", "param1": "" }
+      }
+    ],
+    "archive": []
+  },
+  "info": {
+    "artifacts": ["gw01"],
+    "networks": [
+      {
+        "name": "base_mainnet",
+        "chain_id": 8453,
+        "rpc_url": "https://mainnet.base.org",
+        "block_explorer": "https://basescan.org"
+      },
+      {
+        "name": "base_sepolia",
+        "chain_id": 84532,
+        "rpc_url": "https://sepolia.base.org",
+        "block_explorer": "https://sepolia.basescan.org"
+      }
+    ]
+  }
+}
