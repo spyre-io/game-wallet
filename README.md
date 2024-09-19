@@ -40,3 +40,7 @@ Grant access role to an admin address which can process player stakes and submit
 # 0xe36dd3d438139416652addc594300757f3bf91ccb298951da2b3fc7876a7ce1d
 # Bytes32 value of the TXN_SUBMITTER_ROLE role which admins would need to process transactions on behalf of players.
 ```
+
+### License
+
+This project is open-source and available under the [MIT License](LICENSE).
